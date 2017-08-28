@@ -12,23 +12,11 @@ import {
 import WebViewBridge from 'react-native-webview-bridge';
 import PDFView from './PDFView';
 const RNFS = require('react-native-fs');
-// TODO remove
-const injectScript = `
-  (function () {
-    if (WebViewBridge) {
-
-        setTimeout(function () {
-            console.log('Timeout');
-            WebViewBridge.send(JSON.stringify({ type: "showPDF", payload: "file.pdf" }));
-        }, 1000);
-    }
-}());
-`;
 
 export default class DasabWebView extends Component {
   constructor(props) {
     super(props);
-    this.state = { modalVisible: false, source: null, PDFfilePath: null }
+    this.state = { modalVisible: false, webAppSource: 'file:///android_asset/web_app/main.html', PDFfilePath: null }
   }
   componentDidMount() {
     // Adds Event Listener to back button press
@@ -48,14 +36,13 @@ export default class DasabWebView extends Component {
     return true;
   }
   onBridgeMessage(message) {
-    console.log(message) // TODO remove
     message = JSON.parse(message);
     const { webviewbridge } = this.refs;
     let { type, payload } = message;
 
     switch (type) {
       case "showPDF":
-        this.setState({ PDFfilePath: payload }, () => this.setModalVisible(true));
+        this.setState({ PDFfilePath: payload, modalVisible: true });
         break;
       case "loadData":
         this.loadDataFile(webviewbridge);
@@ -66,18 +53,23 @@ export default class DasabWebView extends Component {
     // Tries to load data.json from SD card, if fails, sent error data to WebView
     RNFS.exists('/sdcard/DasabData/data.json').then((result) => {
       if (result) // file exists
-        RNFS.readFile(statResult[1], 'utf8').then((contents) => {
+        RNFS.readFile('/sdcard/DasabData/data.json', 'utf8').then((contents) => {
           // successfuly read the file
-          webviewbridge.sendToBridge(JSON.stringify({ type: "getData", payload: contents }));
+          contents = JSON.parse(contents);
+          this.sendToBridge(webviewbridge, { type: "getData", payload: contents });
         }).catch((err) => {
           // can't read the file
-          webviewbridge.sendToBridge(JSON.stringify({ type: 'error', payload: err }));
+          this.sendToBridge(webviewbridge, { type: 'error', payload: err });
         });
       else // file don't exists
-        webviewbridge.sendToBridge(JSON.stringify({ type: 'error', payload: "File was not found" }));
+        this.sendToBridge(webviewbridge, { type: 'error', payload: "Data file was not found" });
     }).catch((err) => {
-      webviewbridge.sendToBridge(JSON.stringify({ type: 'error', payload: err }));
+      this.sendToBridge(webviewbridge, { type: 'error', payload: err });
     });
+  }
+  sendToBridge(webviewbridge, obj) {
+    // generete JSON string and URI encoding
+    webviewbridge.sendToBridge(encodeURIComponent(JSON.stringify(obj)));
   }
   setModalVisible(modalVisible) {
     this.setState({ modalVisible }); // set modal visibility
@@ -86,7 +78,7 @@ export default class DasabWebView extends Component {
     // If there is diffrent web app, loads the new web app into WebView.
     RNFS.exists('/sdcard/DasabWeb/main.html').then((result) => {
       if (result)
-        this.setState({ source: { uri: 'file:///sdcard/DasabWeb/main.html' } })
+        this.setState({ webAppSource: 'file:///sdcard/DasabWeb/main.html' });
     });
   }
   render() {
@@ -101,16 +93,16 @@ export default class DasabWebView extends Component {
           ref="webviewbridge"
           onBridgeMessage={this.onBridgeMessage.bind(this)}
           javaScriptEnabled={true}
-
           allowFileAccessFromFileURLs={true}
           allowUniversalAccessFromFileURLs={true}
-          source={this.state.source || require('./web_app/main.html')} />
+          startInLoadingState={true}
+          source={{ uri: this.state.webAppSource }} />
         <Modal
           animationType={"slide"}
           transparent={false}
           visible={this.state.modalVisible}
           onRequestClose={() => { this.setModalVisible(false) }}>
-          <PDFView webviewbridge={this.refs['webviewbridge']} setModalVisible={this.setModalVisible.bind(this)} filePath={this.state.PDFfilePath} />
+          <PDFView webviewbridge={this.refs.webviewbridge} setModalVisible={this.setModalVisible.bind(this)} filePath={this.state.PDFfilePath} />
         </Modal>
       </View>
     );

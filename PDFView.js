@@ -23,6 +23,7 @@ export default class PDFView extends React.Component {
         let filePath = this.props.filePath,
             source = { uri: this.props.filePath, cache: true };
 
+        // Adds file:///sdcard/ if not included
         if (!source.uri.includes('file:///sdcard/'))
             source.uri = 'file:///sdcard/' + this.props.filePath;
 
@@ -39,7 +40,7 @@ export default class PDFView extends React.Component {
                     page={1}
                     horizontal={false}
                     onError={(err) => {
-                        this.props.webviewbridge.sendToBridge(JSON.stringify({ type: 'error', payload: err }));
+                        this.props.webviewbridge.sendToBridge(encodeURIComponent(JSON.stringify({ type: 'error', payload: err })));
                     }}
                     style={styles.pdf} />
             </View>
